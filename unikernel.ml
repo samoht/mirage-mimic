@@ -43,8 +43,8 @@ struct
     include S
   end
   module Socks = Socks.SOCKS4 (Stack)
-  module TLS  = Tls_mirage.Make (Stack.T) (E)
-  module X509 = Tls_mirage.X509 (KV) (Clock)
+(*  module TLS  = Tls_mirage.Make (Stack.T) (E)
+  module X509 = Tls_mirage.X509 (KV) (Clock) *)
 
   let log c fmt = Printf.ksprintf (C.log c) fmt
   let fail fmt = Printf.ksprintf (fun str -> Lwt.fail (Failure str)) fmt
@@ -53,28 +53,28 @@ struct
 
     type 'a io = 'a Lwt.t
     type buffer = Cstruct.t
-    type flow = [`TLS of TLS.flow | `TCP of Stack.T.flow ]
+    type flow = [`TLS of unit | `TCP of Stack.T.flow ]
 
-    type error = [TLS.error | Stack.T.error]
+    type error = [(*TLS.error | *) Stack.T.error]
     type write_result = [ `Eof | `Ok of unit | `Error of error ]
     type read_result = [ `Eof | `Ok of Cstruct.t | `Error of error ]
 
     let read = function
-      | `TLS flow -> (TLS.read flow :> read_result Lwt.t)
+      | `TLS flow -> assert false
       | `TCP flow -> (Stack.T.read flow :> read_result Lwt.t)
 
     let write flow buf =
       match flow with
-      | `TLS flow -> (TLS.write flow buf :> write_result Lwt.t)
+      | `TLS flow -> assert false
       | `TCP flow -> (Stack.T.write flow buf :> write_result Lwt.t)
 
     let writev flow buf =
       match flow with
-      | `TLS flow -> (TLS.writev flow buf :> write_result Lwt.t)
+      | `TLS flow -> assert false
       | `TCP flow -> (Stack.T.writev flow buf :> write_result Lwt.t)
 
     let close = function
-      | `TLS flow -> TLS.close flow
+      | `TLS flow -> assert false
       | `TCP flow -> Stack.T.close flow
 
     let error_message e =
@@ -163,7 +163,7 @@ struct
     | `Error e        -> Lwt.return (`Error (e :> Flow.error))
     | `Ok output_flow -> Lwt.return (`TCP output_flow)
 
-  let tls_flow c s dest_ip dest_port kv =
+(*  let tls_flow c s dest_ip dest_port kv =
     tcp_flow c s dest_ip dest_port >>= function
     | `Error e         -> Lwt.return (`Error (e :> Flow.error))
     | `TCP output_flow ->
@@ -173,7 +173,7 @@ struct
       let conf = Tls.Config.client ~authenticator () in
       TLS.client_of_flow conf "test" output_flow >>= function
       | `Ok f    -> Lwt.return (`TLS f)
-      | `Error e -> Lwt.return (`Error (e :> Flow.error))
+      | `Error e -> Lwt.return (`Error (e :> Flow.error)) *)
 
   let connect_socks_fn c s dest_server_port context incoming =
     log c "New incoming connection - Forwarding connection through SOCKS";
@@ -222,7 +222,7 @@ struct
         read_and_forward flowpairs c outgoing incoming;
       ]
 
-  let connect_tls_fn c s kv dest_ip dest_port flowpairs incoming =
+(*  let connect_tls_fn c s kv dest_ip dest_port flowpairs incoming =
     log c "New incoming connection - Forwarding connection through TLS";
     tls_flow  c s dest_ip dest_port kv >>= function
     | `Error e ->
@@ -235,7 +235,7 @@ struct
         read_and_forward flowpairs c incoming outgoing;
         read_and_forward flowpairs c outgoing incoming;
       ]
-
+*)
   (* from mirage-skeleton *)
   let or_error name fn t =
     fn t >>= function
@@ -254,9 +254,9 @@ struct
     let flowpairs = ref [] in
     connect_tcp_fn c s dest_ip port flowpairs incoming
 
-  let connect_tls ~dest_ip ~kv c s port incoming =
+(*  let connect_tls ~dest_ip ~kv c s port incoming =
     let flowpairs = ref [] in
-    connect_tls_fn c s kv dest_ip port flowpairs incoming
+    connect_tls_fn c s kv dest_ip port flowpairs incoming *)
 
   let listen_mode bootvar =
     let mode_str =
@@ -308,7 +308,7 @@ struct
       let socks_port = socks_port () in
       connect_socks ~dest_ip ~socks_ip ~socks_port ~dest_ports c s port incoming
     | `TCP -> connect_tcp ~dest_ip c s port incoming
-    | `TLS -> connect_tls ~dest_ip ~kv c s port incoming
+    | `TLS -> (*connect_tls ~dest_ip ~kv c s port incoming*) assert false
     | `NAT -> Nat.connect c ~dest_ports ~dest_ip ~ip ~flow_ip:None (`Flow incoming) (`Net n)
     | `UNKNOWN s -> fail "%s: forwarding mode unknown" s
     | `NOT_SET   -> fail "'forward_mode' is not set"
@@ -323,7 +323,7 @@ struct
     OS.Xs.(immediate xs (fun h -> write h key value))
 
   let start c _ e kv =
-    TLS.attach_entropy e >>= fun () ->
+(*    TLS.attach_entropy e >>= fun () -> *)
 
     (* show help on boot *)
     Printf.printf "*** mirage-mimic supported boot options ***\n";
@@ -384,7 +384,7 @@ struct
         let dest_ip = Ipaddr.V4.of_string_exn (Bootvar.get bootvar "dest_ip") in
         let port =  5162 in
         begin match forward_mode bootvar with
-          | `TLS -> tls_flow c s_out dest_ip port kv >|= flow
+          | `TLS -> (*tls_flow c s_out dest_ip port kv >|= flow *) assert false
           | `TCP -> tcp_flow c s_out dest_ip port    >|= flow
           | `NAT -> Lwt.return (`Net (n_out, Stack.ipv4 s_out)) 
           | x    -> fail "%s: invalid forward mode when listen_mode=NAT."
@@ -412,7 +412,7 @@ struct
         Lwt.join [ im_ready c; Stack.listen s_in]
       end
     | `TLS -> begin
-        X509.certificate kv `Default >>= fun cert ->
+(*        X509.certificate kv `Default >>= fun cert ->
         let conf = Tls.Config.server ~certificates:(`Single cert) () in
         let dest_ports = dest_ports bootvar in
         (* listen to ports from dest_ports *)
@@ -425,7 +425,7 @@ struct
           Printf.printf "Listening to TLS, port %d\n" port
         in
         List.iter begin_listen (dest_ports);
-	Lwt.join [ im_ready c; Stack.listen s_in]
+	Lwt.join [ im_ready c; Stack.listen s_in] *) assert false
       end
     | `UNKNOWN s -> fail "%s: listen mode unknown" s
     | `NOT_SET   -> fail "'listen_mode' not set"
